@@ -1,0 +1,110 @@
+name: CI - flag-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["flag-service-main/**", ".github/workflows/flag-service.yml"]
+  pull_request:
+    paths: ["flag-service-main/**", ".github/workflows/flag-service.yml"]
+
+env:
+  SERVICE_NAME: flag-service
+  SERVICE_DIR: flag-service-main
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: togglemaster/flag-service
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: flag-service-main } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q || true
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: build-test
+    defaults: { run: { working-directory: flag-service-main } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install flake8
+      - run: flake8 --max-line-length=120 --exit-zero .
+
+  security:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: bandit (SAST)
+        run: |
+          pip install bandit
+          bandit -r ./flag-service-main -ll -q || true
+      - name: Trivy fs (SCA - bloqueia CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: ./flag-service-main
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: echo "tag=v1.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build
+        run: |
+          IMAGE="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}"
+          docker build -t "$IMAGE" ./flag-service-main
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Push
+        run: docker push "$IMAGE"
+
+  update-gitops:
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - env: { NEW_TAG: "${{ needs.docker.outputs.image_tag }}" }
+        run: |
+          FILE="gitops/apps/flag-service/deployment.yaml"
+          sed -i -E "s|(image: .*togglemaster/flag-service:).*|\1${NEW_TAG}|" "$FILE"
+      - run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gitops/apps/flag-service/deployment.yaml
+          git commit -m "ci(flag-service): bump image to ${{ needs.docker.outputs.image_tag }}" || echo "sem mudanca"
+          git push

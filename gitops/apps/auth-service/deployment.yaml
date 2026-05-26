@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: togglemaster
+  labels: { app: auth-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: auth-service } }
+  template:
+    metadata:
+      labels: { app: auth-service }
+    spec:
+      containers:
+        - name: auth-service
+          image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/togglemaster/auth-service:v1.0.0-INITIAL
+          ports: [{ containerPort: 8001 }]
+          env:
+            - name: PORT
+              value: "8001"
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: auth-secrets, key: database_url } }
+            - name: MASTER_KEY
+              valueFrom: { secretKeyRef: { name: auth-secrets, key: master_key } }
+          readinessProbe:
+            httpGet: { path: /health, port: 8001 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8001 }
+            initialDelaySeconds: 15
+          resources:
+            requests: { cpu: 50m,  memory: 64Mi }
+            limits:   { cpu: 250m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: togglemaster
+spec:
+  selector: { app: auth-service }
+  ports: [{ port: 80, targetPort: 8001 }]

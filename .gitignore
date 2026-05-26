@@ -1,0 +1,98 @@
+################################################################
+# Terraform
+################################################################
+# Arquivos de variáveis com valores reais (NUNCA commitar)
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# Estado local (caso alguém rode sem o backend remoto configurado)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Diretório de plugins e providers baixados pelo `terraform init`
+.terraform/
+.terraform.lock.hcl
+
+# Planos salvos
+*.tfplan
+tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (locais de desenvolvedor)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+################################################################
+# AWS / Credenciais
+################################################################
+.aws/
+credentials
+*.pem
+*.key
+
+################################################################
+# Kubernetes / GitOps
+################################################################
+# Secrets preenchidos a partir do template (template em si pode commitar)
+gitops/secrets.yaml
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+
+################################################################
+# Ambientes virtuais Python
+################################################################
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+
+################################################################
+# Go
+################################################################
+# Binários compilados localmente
+auth-service-main/auth-service
+evaluation-service-main/evaluation-service
+*.exe
+*.test
+*.out
+
+################################################################
+# Docker / Build
+################################################################
+*.tar
+*.tar.gz
+
+################################################################
+# IDEs e SO
+################################################################
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+################################################################
+# Logs e temporários
+################################################################
+*.log
+logs/
+tmp/
+.tmp/
+.env
+.env.local
+.env.*.local
