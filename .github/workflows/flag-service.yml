@@ -51,7 +51,7 @@ jobs:
           pip install bandit
           bandit -r ./flag-service-main -ll -q || true
       - name: Trivy fs (SCA - bloqueia CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: ./flag-service-main
@@ -83,7 +83,7 @@ jobs:
           docker build -t "$IMAGE" ./flag-service-main
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE }}
           severity: CRITICAL
