@@ -47,7 +47,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install bandit && bandit -r ./analytics-service-main -ll -q || true
-      - uses: aquasecurity/trivy-action@0.24.0
+      - uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: ./analytics-service-main
@@ -76,7 +76,7 @@ jobs:
           IMAGE="${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}"
           docker build -t "$IMAGE" ./analytics-service-main
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
-      - uses: aquasecurity/trivy-action@0.24.0
+      - uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE }}"
           severity: CRITICAL

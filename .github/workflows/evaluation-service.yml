@@ -54,7 +54,7 @@ jobs:
         with:
           args: -severity medium -no-fail -fmt sarif -out gosec.sarif ./${{ env.SERVICE_DIR }}/...
       - name: Trivy fs (SCA)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: fs
           scan-ref: ./${{ env.SERVICE_DIR }}
@@ -86,7 +86,7 @@ jobs:
           docker build -t "$IMAGE" ./${{ env.SERVICE_DIR }}
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE }}
           severity: CRITICAL
