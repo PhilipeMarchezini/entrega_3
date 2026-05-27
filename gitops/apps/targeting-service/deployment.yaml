@@ -20,6 +20,8 @@ spec:
               value: "8003"
             - name: DATABASE_URL
               valueFrom: { secretKeyRef: { name: targeting-secrets, key: database_url } }
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service.togglemaster.svc.cluster.local"
           resources:
             requests: { cpu: 50m,  memory: 64Mi }
             limits:   { cpu: 250m, memory: 256Mi }
