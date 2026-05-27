@@ -7,18 +7,15 @@ output "eks_cluster_name" {
 }
 
 output "eks_cluster_endpoint" {
-  value     = module.eks.cluster_endpoint
-  sensitive = true
+  value = module.eks.cluster_endpoint
 }
 
 output "rds_endpoints" {
-  value     = module.rds.endpoints
-  sensitive = true
+  value = module.rds.endpoints
 }
 
 output "redis_endpoint" {
-  value     = module.elasticache.redis_endpoint
-  sensitive = true
+  value = module.elasticache.redis_endpoint
 }
 
 output "dynamodb_table" {
