@@ -10,7 +10,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SEU_USER/SEU_REPO.git
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/auth-service
   destination:
@@ -28,7 +28,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SEU_USER/SEU_REPO.git
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/flag-service
   destination:
@@ -46,7 +46,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SEU_USER/SEU_REPO.git
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/targeting-service
   destination:
@@ -64,7 +64,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SEU_USER/SEU_REPO.git
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/evaluation-service
   destination:
@@ -82,7 +82,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/SEU_USER/SEU_REPO.git
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/analytics-service
   destination:
