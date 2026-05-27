@@ -18,9 +18,9 @@ spec:
           env:
             - name: PORT
               value: "8005"
-            - name: DYNAMODB_TABLE
+            - name: AWS_DYNAMODB_TABLE
               value: "ToggleMasterAnalytics"
-            - name: SQS_QUEUE_URL
+            - name: AWS_SQS_URL
               valueFrom: { secretKeyRef: { name: analytics-secrets, key: sqs_queue_url } }
             - name: AWS_REGION
               value: "us-east-1"
