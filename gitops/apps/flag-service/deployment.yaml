@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: flag-service
-          image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/togglemaster/flag-service:v1.0.0-INITIAL
+          image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/togglemaster/flag-service:v1.0.0-0b5ff20
           ports: [{ containerPort: 8002 }]
           env:
             - name: PORT
