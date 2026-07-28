@@ -83,6 +83,24 @@ spec:
                   value: togglemaster-hml-eks
                   action: upsert
 
+            # Uniformiza a descricao de http.client.duration.
+            #
+            # O SDK Go e o do Python descrevem a mesma metrica com textos
+            # diferentes ("Measures the duration of outbound HTTP requests."
+            # x "measures the duration of the outbound HTTP request"). Ambos
+            # viram http_client_duration_milliseconds no exporter Prometheus,
+            # que exige HELP identico para o mesmo nome. Sem isso ele aborta
+            # a coleta INTEIRA com "error gathering metrics" e o /metrics
+            # responde vazio -- nenhuma metrica chega ao Prometheus e o
+            # alerta de 5xx nunca dispara.
+            transform/help_uniforme:
+              error_mode: ignore
+              metric_statements:
+                - context: metric
+                  statements:
+                    - set(description, "Duration of outbound HTTP requests")
+                      where name == "http.client.duration"
+
           exporters:
             # --- APM comercial ---
             datadog:
@@ -113,7 +131,7 @@ spec:
                 exporters: [datadog]
               metrics:
                 receivers: [otlp]
-                processors: [memory_limiter, resource, batch]
+                processors: [memory_limiter, resource, transform/help_uniforme, batch]
                 exporters: [prometheus, datadog]
 
         # Expoe as metricas do proprio collector e as convertidas para o Prometheus.
