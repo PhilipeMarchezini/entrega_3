@@ -132,3 +132,16 @@ spec:
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    # O sync-wave ordena a CRIACAO das Applications, mas cada filha
+    # sincroniza por conta propria e nao espera a irma ficar Healthy.
+    # Num cluster novo esta aqui tenta criar o ServiceMonitor antes de o
+    # kube-prometheus-stack instalar o CRD e falha com "one or more
+    # synchronization tasks are not valid". Com o default de 5 tentativas
+    # ela desiste e fica OutOfSync/Missing ate' alguem sincronizar a mao.
+    # O retry abaixo cobre os ~10 min que a stack leva para instalar.
+    retry:
+      limit: 15
+      backoff:
+        duration: 20s
+        factor: 2
+        maxDuration: 3m
