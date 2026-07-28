@@ -53,6 +53,18 @@ spec:
           persistence:
             enabled: false
 
+          # Ao desligar a persistencia o chart remove o volume de dados por
+          # completo - nao monta nada em /var/loki. Como o container roda com
+          # readOnlyRootFilesystem: true, o Loki morre no boot com
+          # "mkdir /var/loki: read-only file system". O emptyDir abaixo devolve
+          # o diretorio gravavel que o storage filesystem precisa.
+          extraVolumes:
+            - name: loki-storage
+              emptyDir: {}
+          extraVolumeMounts:
+            - name: loki-storage
+              mountPath: /var/loki
+
         # Componentes do modo distribuido - desligados.
         backend:      { replicas: 0 }
         read:         { replicas: 0 }
