@@ -163,3 +163,55 @@ spec:
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=true]
+---
+################################################################
+# Nginx Ingress Controller.
+#
+# Os dois Ingress em gitops/apps/ingress declaram ingressClassName:
+# nginx, mas nada no repositorio instalava o controller - eles ficavam
+# sem ADDRESS e a API nao tinha URL publica. Este Application preenche
+# essa lacuna, mantendo o controller versionado como o resto.
+#
+# sync-wave -1: sobe antes dos Ingress, para eles ja' encontrarem a
+# IngressClass ao serem criados.
+################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  source:
+    repoURL: https://kubernetes.github.io/ingress-nginx
+    chart: ingress-nginx
+    targetRevision: 4.11.8
+    helm:
+      values: |
+        controller:
+          replicaCount: 1
+          service:
+            # Classic ELB, criado pelo cloud provider in-tree do EKS.
+            # Nao usamos NLB nem o AWS Load Balancer Controller porque
+            # este exigiria uma IAM Role, indisponivel no Academy.
+            type: LoadBalancer
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          metrics:
+            enabled: true
+            # ServiceMonitor desligado de proposito: num cluster novo o
+            # CRD pode ainda nao existir e o sync falharia.
+            serviceMonitor:
+              enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress-nginx
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    retry:
+      limit: 10
+      backoff: { duration: 20s, factor: 2, maxDuration: 3m }
