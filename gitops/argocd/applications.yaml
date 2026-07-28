@@ -192,6 +192,15 @@ spec:
       values: |
         controller:
           replicaCount: 1
+          # Webhook de admissao desligado. Ele e' instalado por dois Jobs
+          # de hook (admission-create/patch); o create completa, o ArgoCD
+          # o apaga pela politica de hook e a operacao trava em
+          # "waiting for completion of hook batch/Job/..." indefinidamente,
+          # sem nunca criar o Deployment do controller.
+          # O webhook so' valida a sintaxe dos Ingress na admissao - os
+          # dois Ingress deste projeto sao fixos e ja' validados.
+          admissionWebhooks:
+            enabled: false
           service:
             # Classic ELB, criado pelo cloud provider in-tree do EKS.
             # Nao usamos NLB nem o AWS Load Balancer Controller porque
