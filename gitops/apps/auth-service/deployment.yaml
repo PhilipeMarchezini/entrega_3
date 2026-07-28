@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: 436964578473.dkr.ecr.us-east-1.amazonaws.com/togglemaster/auth-service:v1.0.0-a8e3426
+          image: 436964578473.dkr.ecr.us-east-1.amazonaws.com/togglemaster/auth-service:v1.0.0-1cd8be4
           ports: [{ containerPort: 8001 }]
           env:
             - name: PORT
