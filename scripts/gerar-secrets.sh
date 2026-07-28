@@ -44,11 +44,20 @@ RDS_AUTH=$(printf '%s' "$RDS_JSON" | python -c "import json,sys; print(json.load
 RDS_FLAG=$(printf '%s' "$RDS_JSON" | python -c "import json,sys; print(json.load(sys.stdin)['flag'])")
 RDS_TARG=$(printf '%s' "$RDS_JSON" | python -c "import json,sys; print(json.load(sys.stdin)['targeting'])")
 
-# O terraform ja' devolve host:porta nos RDS. O do Redis vem sem porta.
-case "$REDIS" in
-  *:*) REDIS_HP="$REDIS" ;;
-  *)   REDIS_HP="$REDIS:6379" ;;
-esac
+# Verificado no apply de 28/07/2026: o output devolve os RDS SEM a porta
+# (host puro), ao contrario do que a doc antiga dizia. Sem porta explicita
+# a URL ainda funciona (o driver assume 5432), mas deixar implicito e' o
+# tipo de coisa que confunde na hora de depurar. Normaliza os dois casos.
+porta_se_faltar() {
+  case "$1" in
+    *:[0-9]*) printf '%s' "$1" ;;
+    *)        printf '%s:%s' "$1" "$2" ;;
+  esac
+}
+RDS_AUTH=$(porta_se_faltar "$RDS_AUTH" 5432)
+RDS_FLAG=$(porta_se_faltar "$RDS_FLAG" 5432)
+RDS_TARG=$(porta_se_faltar "$RDS_TARG" 5432)
+REDIS_HP=$(porta_se_faltar "$REDIS" 6379)
 
 for v in RDS_AUTH RDS_FLAG RDS_TARG REDIS_HP SQS; do
   if [ -z "${!v}" ]; then

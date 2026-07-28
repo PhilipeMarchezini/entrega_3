@@ -1,6 +1,10 @@
 name: CI - flag-service
 
 on:
+  # Permite reconstruir e republicar a imagem sem alterar codigo.
+  # Necessario depois de um teardown: o ECR e' recriado vazio, e um
+  # commit vazio nao dispara nada por causa do filtro 'paths' abaixo.
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ["flag-service-main/**", ".github/workflows/flag-service.yml"]
