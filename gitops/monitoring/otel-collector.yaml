@@ -15,6 +15,12 @@ kind: Application
 metadata:
   name: otel-collector
   namespace: argocd
+  annotations:
+    # Wave 1: este Application cria um ServiceMonitor (ver serviceMonitor.enabled
+    # no fim do arquivo), cujo CRD so' existe depois que o kube-prometheus-stack
+    # (wave 0) sincroniza. Sem a ordenacao o sync falha com
+    # "no matches for kind ServiceMonitor" e o Deployment do collector nao sobe.
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
   source:

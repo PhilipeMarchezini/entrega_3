@@ -17,6 +17,10 @@ kind: Application
 metadata:
   name: kube-prometheus-stack
   namespace: argocd
+  annotations:
+    # Wave 0: instala os CRDs (ServiceMonitor, PrometheusRule...) dos quais o
+    # Application otel-collector depende. Ele esta' na wave 1.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
@@ -30,7 +34,12 @@ spec:
         # ---------------- Prometheus ----------------
         prometheus:
           prometheusSpec:
-            retention: 7d
+            # Sem storageSpec: o cluster nao tem o addon aws-ebs-csi-driver
+            # (ele exige IRSA, que o Academy nao permite), entao o
+            # volumeClaimTemplate ficaria Pending para sempre e o
+            # StatefulSet nunca subiria. Sem ele o Prometheus usa emptyDir,
+            # e a retencao cai para o que cabe no disco efemero do no'.
+            retention: 2d
             # Descobre ServiceMonitors de qualquer namespace, inclusive o do
             # OTel Collector, que expoe as metricas das aplicacoes.
             serviceMonitorSelectorNilUsesHelmValues: false
@@ -39,13 +48,6 @@ spec:
             resources:
               requests: { cpu: 200m, memory: 768Mi }
               limits:   { cpu: 1,    memory: 2Gi }
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 20Gi
 
         alertmanager:
           enabled: false   # O alerting fica no Grafana Unified Alerting.

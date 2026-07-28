@@ -45,9 +45,13 @@ spec:
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits:   { cpu: 500m, memory: 1Gi }
+          # Sem PVC: o cluster nao tem o addon aws-ebs-csi-driver (ele exige
+          # IRSA, que o Academy nao permite), entao um PersistentVolumeClaim
+          # ficaria Pending para sempre. Com emptyDir o Loki grava no disco
+          # efemero do no'. A retencao de 7 dias abaixo continua valendo
+          # enquanto o pod viver, o que basta para a demonstracao.
           persistence:
-            enabled: true
-            size: 10Gi
+            enabled: false
 
         # Componentes do modo distribuido - desligados.
         backend:      { replicas: 0 }
