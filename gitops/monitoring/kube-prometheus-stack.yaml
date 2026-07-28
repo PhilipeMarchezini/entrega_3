@@ -87,6 +87,18 @@ spec:
                 maxLines: 1000
 
           # ------------- Alerting como codigo -------------
+          #
+          # ATENCAO ao escrever templates aqui: o subchart do Grafana passa
+          # todo este bloco por `tpl`, entao o HELM tenta interpretar as
+          # expressoes {{ }} antes do Grafana ver o arquivo. Sem escapar, o
+          # `helm template` falha com
+          #   error calling tpl: ... template "default.title" not defined
+          # e o Application fica em Unknown, sem nunca instalar Prometheus
+          # nem Grafana.
+          #
+          # Por isso cada expressao do Grafana aparece como  {{ `...` }} :
+          # a crase faz o Helm emitir o conteudo literal, e o Grafana recebe
+          # o {{ }} intacto para avaliar em tempo de alerta.
           alerting:
             contactpoints.yaml:
               apiVersion: 1
@@ -102,19 +114,19 @@ spec:
                         severity: critical
                         class: togglemaster
                         component: auth-service
-                        summary: '{{ template "default.title" . }}'
+                        summary: '{{ `{{ template "default.title" . }}` }}'
 
                     # 2) Notifica o time no Discord (ChatOps)
                     - uid: discord-chatops
                       type: discord
                       settings:
                         url: $DISCORD_WEBHOOK_URL
-                        title: '[ToggleMaster] {{ template "default.title" . }}'
+                        title: '[ToggleMaster] {{ `{{ template "default.title" . }}` }}'
                         message: |
-                          **Alerta:** {{ .CommonLabels.alertname }}
+                          **Alerta:** {{ `{{ .CommonLabels.alertname }}` }}
                           **Servico:** auth-service
-                          **Status:** {{ .Status }}
-                          **Resumo:** {{ .CommonAnnotations.summary }}
+                          **Status:** {{ `{{ .Status }}` }}
+                          **Resumo:** {{ `{{ .CommonAnnotations.summary }}` }}
                           **Runbook:** self-healing automatico acionado via GitHub Actions.
 
                     # 3) Dispara o Self-Healing (GitHub Actions)
@@ -132,8 +144,8 @@ spec:
                             {
                               "event_type": "self-healing",
                               "client_payload": {
-                                "alertname": "{{ .CommonLabels.alertname }}",
-                                "status": "{{ .Status }}",
+                                "alertname": "{{ `{{ .CommonLabels.alertname }}` }}",
+                                "status": "{{ `{{ .Status }}` }}",
                                 "service": "auth-service",
                                 "namespace": "togglemaster"
                               }
