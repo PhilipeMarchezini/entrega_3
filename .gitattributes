@@ -1,0 +1,11 @@
+# Normaliza fim de linha: evita diffs fantasma CRLF vs LF entre Windows e o CI Linux.
+* text=auto eol=lf
+
+# Scripts que precisam obrigatoriamente de LF (rodam dentro de contêineres Linux).
+*.sh text eol=lf
+Dockerfile text eol=lf
+
+# Binários e artefatos não devem ser normalizados.
+*.png binary
+*.jpg binary
+*.pdf binary

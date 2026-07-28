@@ -22,6 +22,23 @@ spec:
               valueFrom: { secretKeyRef: { name: targeting-secrets, key: database_url } }
             - name: AUTH_SERVICE_URL
               value: "http://auth-service.togglemaster.svc.cluster.local"
+            # --- OpenTelemetry (instrumentacao automatica via opentelemetry-instrument) ---
+            - name: OTEL_SERVICE_NAME
+              value: "targeting-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=hml"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+          readinessProbe:
+            httpGet: { path: /health, port: 8003 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8003 }
+            initialDelaySeconds: 15
           resources:
             requests: { cpu: 50m,  memory: 64Mi }
             limits:   { cpu: 250m, memory: 256Mi }

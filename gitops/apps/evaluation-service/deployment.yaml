@@ -30,6 +30,21 @@ spec:
               value: "http://targeting-service.togglemaster.svc.cluster.local"
             - name: SERVICE_API_KEY
               valueFrom: { secretKeyRef: { name: evaluation-secrets, key: service_api_key } }
+            # --- OpenTelemetry ---
+            - name: OTEL_SERVICE_NAME
+              value: "evaluation-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=hml"
+          readinessProbe:
+            httpGet: { path: /health, port: 8004 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: 8004 }
+            initialDelaySeconds: 15
           resources:
             requests: { cpu: 50m,  memory: 64Mi }
             limits:   { cpu: 250m, memory: 256Mi }

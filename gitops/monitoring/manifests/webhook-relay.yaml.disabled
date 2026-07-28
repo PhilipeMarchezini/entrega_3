@@ -1,0 +1,124 @@
+################################################################
+# PLANO B - relay de webhook (NAO aplicado por padrao).
+#
+# Quando usar: se a versao do Grafana instalada nao suportar o
+# "custom payload" no contact point de webhook (recurso disponivel a
+# partir do Grafana 11.6). Sem ele, o Grafana envia um corpo JSON
+# proprio e o GitHub rejeita com 422, porque o repository_dispatch
+# exige o campo event_type.
+#
+# Este relay recebe o webhook do Grafana e refaz o POST no formato
+# que o GitHub espera.
+#
+# Como ativar:
+#   1. renomeie para webhook-relay.yaml (o ArgoCD passa a sincronizar)
+#   2. no kube-prometheus-stack.yaml, troque a url do contact point
+#      github-self-healing para:
+#        http://webhook-relay.observability.svc.cluster.local:8080/hook
+#      e remova as chaves authorization_* e payload
+#
+# O PAT do GitHub continua vindo do Secret grafana-alerting-secrets.
+################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webhook-relay-code
+  namespace: observability
+data:
+  relay.py: |
+    import json
+    import os
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    GITHUB_URL = os.environ["GITHUB_DISPATCH_URL"]
+    GITHUB_PAT = os.environ["GITHUB_PAT"]
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            try:
+                alert = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                alert = {}
+
+            labels = (alert.get("commonLabels") or {})
+            body = json.dumps({
+                "event_type": "self-healing",
+                "client_payload": {
+                    "alertname": labels.get("alertname", "desconhecido"),
+                    "status": alert.get("status", "firing"),
+                    "service": labels.get("service", "auth-service"),
+                    "namespace": "togglemaster",
+                },
+            }).encode()
+
+            req = urllib.request.Request(GITHUB_URL, data=body, method="POST")
+            req.add_header("Authorization", f"Bearer {GITHUB_PAT}")
+            req.add_header("Accept", "application/vnd.github+json")
+            req.add_header("Content-Type", "application/json")
+
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    print(f"GitHub respondeu {resp.status}", flush=True)
+                    status = 202
+            except Exception as exc:  # noqa: BLE001
+                print(f"Falha ao chamar o GitHub: {exc}", flush=True)
+                status = 502
+
+            self.send_response(status)
+            self.end_headers()
+
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-relay
+  namespace: observability
+  labels: { app: webhook-relay }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: webhook-relay } }
+  template:
+    metadata:
+      labels: { app: webhook-relay }
+    spec:
+      containers:
+        - name: relay
+          image: python:3.12-slim
+          command: ["python", "/app/relay.py"]
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: GITHUB_DISPATCH_URL
+              value: "https://api.github.com/repos/PhilipeMarchezini/entrega_3/dispatches"
+            - name: GITHUB_PAT
+              valueFrom:
+                secretKeyRef: { name: grafana-alerting-secrets, key: GITHUB_PAT }
+          volumeMounts:
+            - { name: code, mountPath: /app }
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits:   { cpu: 100m, memory: 128Mi }
+      volumes:
+        - name: code
+          configMap: { name: webhook-relay-code }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-relay
+  namespace: observability
+spec:
+  selector: { app: webhook-relay }
+  ports: [{ port: 8080, targetPort: 8080 }]

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -43,9 +45,17 @@ func (a *App) validateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	var id int
 	err := a.DB.QueryRow("SELECT id FROM api_keys WHERE key_hash = $1 AND is_active = true", keyHash).Scan(&id)
 	if err != nil {
-		// Se não encontrar (sql.ErrNoRows), ou qualquer outro erro, a chave é inválida
-		log.Printf("Falha na validação da chave (hash: %s...): %v", keyHash[:6], err)
-		http.Error(w, "Chave de API inválida ou inativa", http.StatusUnauthorized)
+		// Distingue "chave não existe" de "banco indisponível". Tratar os dois como 401
+		// tornava a falha de infraestrutura invisível: o serviço respondia como se a
+		// chave fosse inválida e nenhum 5xx era emitido para o monitoramento.
+		if errors.Is(err, sql.ErrNoRows) {
+			log.Printf("Chave de API não encontrada ou inativa (hash: %s...)", keyHash[:6])
+			http.Error(w, "Chave de API inválida ou inativa", http.StatusUnauthorized)
+			return
+		}
+
+		log.Printf("ERRO de infraestrutura ao validar chave (hash: %s...): %v", keyHash[:6], err)
+		http.Error(w, "Servico de autenticacao indisponivel", http.StatusServiceUnavailable)
 		return
 	}
 

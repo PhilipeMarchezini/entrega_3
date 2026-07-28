@@ -1,0 +1,91 @@
+################################################################
+# OTel Collector - modo DaemonSet (coleta de logs).
+#
+# Le os arquivos de log de todos os contêineres em /var/log/pods
+# (preset logsCollection) e envia para o Loki via OTLP nativo e
+# para o Datadog.
+#
+# Roda como DaemonSet porque log em arquivo e' local ao no'; o
+# collector de OTLP das aplicacoes e' um Deployment separado.
+################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector-logs
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.108.0
+    helm:
+      values: |
+        mode: daemonset
+        fullnameOverride: otel-collector-logs
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        presets:
+          # Monta /var/log/pods e configura o receiver filelog.
+          logsCollection:
+            enabled: true
+            includeCollectorLogs: false
+          # Enriquece cada log com namespace, pod, container e node.
+          kubernetesAttributes:
+            enabled: true
+
+        extraEnvs:
+          - name: DD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: datadog-api-key
+                key: api-key
+
+        resources:
+          requests: { cpu: 50m,  memory: 128Mi }
+          limits:   { cpu: 300m, memory: 512Mi }
+
+        config:
+          processors:
+            batch:
+              timeout: 10s
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            resource:
+              attributes:
+                - key: deployment.environment
+                  value: hml
+                  action: upsert
+
+          exporters:
+            # Loki 3.x aceita OTLP nativo em /otlp/v1/logs - o exporter
+            # "loki" dedicado foi descontinuado.
+            otlphttp/loki:
+              endpoint: http://loki-gateway.observability.svc.cluster.local/otlp
+              tls:
+                insecure: true
+
+            datadog:
+              api:
+                key: ${env:DD_API_KEY}
+                site: us5.datadoghq.com
+
+          service:
+            pipelines:
+              logs:
+                receivers: [filelog]
+                processors: [memory_limiter, k8sattributes, resource, batch]
+                exporters: [otlphttp/loki, datadog]
+              # Pipelines nao usados neste collector.
+              traces: null
+              metrics: null
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

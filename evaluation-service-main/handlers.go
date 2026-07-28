@@ -30,8 +30,10 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Obter a decisão (lógica de cache/serviço está em evaluator.go)
-	result, err := a.getDecision(userID, flagName)
+	// 2. Obter a decisão (lógica de cache/serviço está em evaluator.go).
+	// r.Context() carrega o span da requisição atual - é o que liga este serviço
+	// aos spans do flag-service e do targeting-service no trace distribuído.
+	result, err := a.getDecision(r.Context(), userID, flagName)
 	if err != nil {
 		// Se o erro for "não encontrado", retornamos 'false' (comportamento seguro)
 		if _, ok := err.(*NotFoundError); ok {

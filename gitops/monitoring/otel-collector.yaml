@@ -1,0 +1,128 @@
+################################################################
+# OTel Collector - modo Deployment.
+#
+# Peca central da telemetria: recebe OTLP dos 5 microsservicos e
+# roteia para os backends corretos.
+#   traces  -> Datadog (APM, Service Map, trace distribuido)
+#   metrics -> Datadog + exporter Prometheus (:8889), scrapado
+#              pelo Prometheus do kube-prometheus-stack
+#
+# Usa a imagem "contrib" porque o exporter datadog nao existe na
+# imagem core do collector.
+################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.108.0
+    helm:
+      values: |
+        mode: deployment
+        replicaCount: 1
+        fullnameOverride: otel-collector
+
+        image:
+          repository: otel/opentelemetry-collector-contrib
+
+        # A API key do Datadog vem de um Secret criado fora do Git.
+        extraEnvs:
+          - name: DD_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: datadog-api-key
+                key: api-key
+
+        resources:
+          requests: { cpu: 100m, memory: 256Mi }
+          limits:   { cpu: 500m, memory: 768Mi }
+
+        ports:
+          prometheus:
+            enabled: true
+            containerPort: 8889
+            servicePort: 8889
+            protocol: TCP
+
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318
+
+          processors:
+            batch:
+              timeout: 10s
+              send_batch_size: 1024
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+            # Marca de onde veio a telemetria - aparece como tag no Datadog
+            # e como label no Prometheus.
+            resource:
+              attributes:
+                - key: deployment.environment
+                  value: hml
+                  action: upsert
+                - key: k8s.cluster.name
+                  value: togglemaster-hml-eks
+                  action: upsert
+
+          exporters:
+            # --- APM comercial ---
+            datadog:
+              api:
+                key: ${env:DD_API_KEY}
+                site: us5.datadoghq.com
+              traces:
+                compute_stats_by_span_kind: true
+                peer_tags_aggregation: true
+
+            # --- Metricas para o Prometheus fazer scrape ---
+            prometheus:
+              endpoint: 0.0.0.0:8889
+              resource_to_telemetry_conversion:
+                enabled: true
+
+            debug:
+              verbosity: basic
+
+          service:
+            telemetry:
+              metrics:
+                address: 0.0.0.0:8888
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, resource, batch]
+                exporters: [datadog]
+              metrics:
+                receivers: [otlp]
+                processors: [memory_limiter, resource, batch]
+                exporters: [prometheus, datadog]
+
+        # Expoe as metricas do proprio collector e as convertidas para o Prometheus.
+        podMonitor:
+          enabled: false
+        serviceMonitor:
+          enabled: true
+          extraLabels:
+            release: kube-prometheus-stack
+          metricsEndpoints:
+            - port: prometheus
+              interval: 15s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

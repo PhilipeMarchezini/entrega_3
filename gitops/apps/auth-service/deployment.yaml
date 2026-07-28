@@ -22,6 +22,15 @@ spec:
               valueFrom: { secretKeyRef: { name: auth-secrets, key: database_url } }
             - name: MASTER_KEY
               valueFrom: { secretKeyRef: { name: auth-secrets, key: master_key } }
+            # --- OpenTelemetry ---
+            - name: OTEL_SERVICE_NAME
+              value: "auth-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability.svc.cluster.local:4317"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=togglemaster,deployment.environment=hml"
           readinessProbe:
             httpGet: { path: /health, port: 8001 }
             initialDelaySeconds: 5

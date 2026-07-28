@@ -5,8 +5,8 @@ vpc_cidr              = "10.0.0.0/16"
 azs                   = ["us-east-1a", "us-east-1b"]
 lab_role_name         = "LabRole"
 eks_cluster_version   = "1.30"
-eks_node_instance_types = ["t3.medium"]
-eks_node_desired_size = 2
+eks_node_instance_types = ["t3.large"]
+eks_node_desired_size = 3
 rds_master_username   = "togglemaster"
 # rds_master_password vem da env TF_VAR_rds_master_password
 rds_databases         = ["auth", "flag", "targeting"]

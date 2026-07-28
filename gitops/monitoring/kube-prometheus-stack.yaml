@@ -1,0 +1,227 @@
+################################################################
+# kube-prometheus-stack: Prometheus + Grafana + node-exporter +
+# kube-state-metrics.
+#
+# Inclui, provisionados como codigo:
+#   - datasources (Prometheus e Loki)
+#   - o dashboard customizado (via sidecar, do ConfigMap)
+#   - a regra de alerta de 5xx do auth-service
+#   - os contact points: PagerDuty, Discord e webhook de self-healing
+#
+# Os segredos (chave do PagerDuty, webhook do Discord, PAT do GitHub)
+# vem do Secret grafana-alerting-secrets, criado fora do Git e
+# interpolado nos arquivos de provisionamento como $VARIAVEL.
+################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 75.6.0
+    helm:
+      values: |
+        fullnameOverride: kube-prometheus-stack
+
+        # ---------------- Prometheus ----------------
+        prometheus:
+          prometheusSpec:
+            retention: 7d
+            # Descobre ServiceMonitors de qualquer namespace, inclusive o do
+            # OTel Collector, que expoe as metricas das aplicacoes.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            resources:
+              requests: { cpu: 200m, memory: 768Mi }
+              limits:   { cpu: 1,    memory: 2Gi }
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 20Gi
+
+        alertmanager:
+          enabled: false   # O alerting fica no Grafana Unified Alerting.
+
+        # ---------------- Grafana ----------------
+        grafana:
+          enabled: true
+          adminPassword: ToggleMaster2024!
+
+          service:
+            type: LoadBalancer
+
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+
+          # Chaves do PagerDuty / Discord / GitHub.
+          envFromSecret: grafana-alerting-secrets
+
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              searchNamespace: ALL
+            datasources:
+              enabled: true
+              defaultDatasourceEnabled: true
+              uid: prometheus
+
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              uid: loki
+              access: proxy
+              url: http://loki-gateway.observability.svc.cluster.local
+              jsonData:
+                maxLines: 1000
+
+          # ------------- Alerting como codigo -------------
+          alerting:
+            contactpoints.yaml:
+              apiVersion: 1
+              contactPoints:
+                - orgId: 1
+                  name: togglemaster-oncall
+                  receivers:
+                    # 1) Abre incidente no PagerDuty
+                    - uid: pagerduty-oncall
+                      type: pagerduty
+                      settings:
+                        integrationKey: $PAGERDUTY_INTEGRATION_KEY
+                        severity: critical
+                        class: togglemaster
+                        component: auth-service
+                        summary: '{{ template "default.title" . }}'
+
+                    # 2) Notifica o time no Discord (ChatOps)
+                    - uid: discord-chatops
+                      type: discord
+                      settings:
+                        url: $DISCORD_WEBHOOK_URL
+                        title: '[ToggleMaster] {{ template "default.title" . }}'
+                        message: |
+                          **Alerta:** {{ .CommonLabels.alertname }}
+                          **Servico:** auth-service
+                          **Status:** {{ .Status }}
+                          **Resumo:** {{ .CommonAnnotations.summary }}
+                          **Runbook:** self-healing automatico acionado via GitHub Actions.
+
+                    # 3) Dispara o Self-Healing (GitHub Actions)
+                    #    O payload customizado e' necessario porque o
+                    #    repository_dispatch exige o campo event_type.
+                    - uid: github-self-healing
+                      type: webhook
+                      settings:
+                        url: https://api.github.com/repos/PhilipeMarchezini/entrega_3/dispatches
+                        httpMethod: POST
+                        authorization_scheme: Bearer
+                        authorization_credentials: $GITHUB_PAT
+                        payload:
+                          template: |
+                            {
+                              "event_type": "self-healing",
+                              "client_payload": {
+                                "alertname": "{{ .CommonLabels.alertname }}",
+                                "status": "{{ .Status }}",
+                                "service": "auth-service",
+                                "namespace": "togglemaster"
+                              }
+                            }
+
+            policies.yaml:
+              apiVersion: 1
+              policies:
+                - orgId: 1
+                  receiver: togglemaster-oncall
+                  group_by: [alertname]
+                  group_wait: 10s
+                  group_interval: 1m
+                  repeat_interval: 1h
+
+            rules.yaml:
+              apiVersion: 1
+              groups:
+                - orgId: 1
+                  name: togglemaster
+                  folder: ToggleMaster
+                  interval: 1m
+                  rules:
+                    - uid: auth-5xx-rate
+                      title: auth-service - taxa de erros 5xx acima de 5%
+                      condition: C
+                      for: 1m
+                      annotations:
+                        summary: >-
+                          A taxa de respostas 5xx do auth-service passou de 5%.
+                          Provavel indisponibilidade do banco de dados.
+                        runbook: >-
+                          Self-healing dispara rollout restart do deployment.
+                          Verificar o RDS do auth antes de escalar para humano.
+                      labels:
+                        severity: critical
+                        service: auth-service
+                      data:
+                        # A) taxa de 5xx em porcentagem, a partir da metrica
+                        #    gerada pelo otelhttp e exportada pelo OTel Collector.
+                        - refId: A
+                          relativeTimeRange: { from: 300, to: 0 }
+                          datasourceUid: prometheus
+                          model:
+                            refId: A
+                            editorMode: code
+                            instant: false
+                            range: true
+                            expr: |
+                              100 * (
+                                sum(rate(http_server_request_duration_seconds_count{service_name="auth-service", http_response_status_code=~"5.."}[5m]))
+                                /
+                                clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name="auth-service"}[5m])), 0.001)
+                              )
+                        # B) reduz a serie para um unico valor
+                        - refId: B
+                          datasourceUid: __expr__
+                          model:
+                            refId: B
+                            type: reduce
+                            reducer: last
+                            expression: A
+                        # C) condicao do alerta
+                        - refId: C
+                          datasourceUid: __expr__
+                          model:
+                            refId: C
+                            type: threshold
+                            expression: B
+                            conditions:
+                              - evaluator:
+                                  type: gt
+                                  params: [5]
+
+        # ---------------- Exporters de infraestrutura ----------------
+        nodeExporter:
+          enabled: true
+        kubeStateMetrics:
+          enabled: true
+
+        # Componentes do control plane sao gerenciados pela AWS no EKS:
+        # nao ha' como fazer scrape deles, entao ficam desligados para
+        # evitar alertas falsos.
+        kubeControllerManager: { enabled: false }
+        kubeScheduler:         { enabled: false }
+        kubeEtcd:              { enabled: false }
+        kubeProxy:             { enabled: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

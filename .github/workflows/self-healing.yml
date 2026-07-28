@@ -1,0 +1,112 @@
+################################################################
+# Self-Healing (Fase 4)
+#
+# Disparado pelo contact point de webhook do Grafana quando o alerta
+# "auth-service - taxa de erros 5xx acima de 5%" entra em Firing.
+# O Grafana faz POST em /repos/<owner>/<repo>/dispatches com
+# event_type=self-healing, o que aciona este workflow.
+#
+# Acao corretiva: rollout restart do deployment afetado, tentando
+# mitigar a falha sem intervencao humana.
+#
+# Teste manual: aba Actions > Self-Healing > Run workflow.
+################################################################
+name: Self-Healing
+
+on:
+  repository_dispatch:
+    types: [self-healing]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Deployment alvo do rollout restart"
+        required: false
+        default: "auth-service"
+      namespace:
+        description: "Namespace do deployment"
+        required: false
+        default: "togglemaster"
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: togglemaster-hml-eks
+
+permissions:
+  contents: read
+
+jobs:
+  remediate:
+    name: Rollout restart do servico afetado
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve alvo (webhook do Grafana ou execucao manual)
+        id: target
+        run: |
+          SERVICE="${{ github.event.client_payload.service || inputs.service || 'auth-service' }}"
+          NAMESPACE="${{ github.event.client_payload.namespace || inputs.namespace || 'togglemaster' }}"
+          ALERT="${{ github.event.client_payload.alertname || 'execucao manual' }}"
+          STATUS="${{ github.event.client_payload.status || 'manual' }}"
+          echo "service=$SERVICE"     >> "$GITHUB_OUTPUT"
+          echo "namespace=$NAMESPACE" >> "$GITHUB_OUTPUT"
+          echo "alert=$ALERT"         >> "$GITHUB_OUTPUT"
+          echo "status=$STATUS"       >> "$GITHUB_OUTPUT"
+          echo "::notice::Alerta '$ALERT' ($STATUS) -> reiniciando $NAMESPACE/$SERVICE"
+
+      # Só age quando o alerta está disparando. Se o Grafana mandar a
+      # notificação de resolução, o workflow encerra sem tocar no cluster.
+      - name: Ignora notificacao de resolucao
+        if: steps.target.outputs.status == 'resolved'
+        run: |
+          echo "Alerta resolvido - nenhuma acao corretiva necessaria."
+          exit 0
+
+      - name: Configure AWS credentials
+        if: steps.target.outputs.status != 'resolved'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Configura o kubeconfig do EKS
+        if: steps.target.outputs.status != 'resolved'
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
+
+      - name: Estado ANTES da acao corretiva
+        if: steps.target.outputs.status != 'resolved'
+        run: |
+          kubectl get pods -n "${{ steps.target.outputs.namespace }}" \
+            -l app="${{ steps.target.outputs.service }}" -o wide
+
+      - name: Acao corretiva - rollout restart
+        if: steps.target.outputs.status != 'resolved'
+        run: |
+          kubectl rollout restart deployment/"${{ steps.target.outputs.service }}" \
+            -n "${{ steps.target.outputs.namespace }}"
+          kubectl rollout status deployment/"${{ steps.target.outputs.service }}" \
+            -n "${{ steps.target.outputs.namespace }}" --timeout=180s
+
+      - name: Estado DEPOIS da acao corretiva
+        if: steps.target.outputs.status != 'resolved'
+        run: |
+          kubectl get pods -n "${{ steps.target.outputs.namespace }}" \
+            -l app="${{ steps.target.outputs.service }}" -o wide
+
+      # Fecha o loop de ChatOps: o time ve no mesmo canal o alerta e a
+      # acao automatica tomada em resposta a ele.
+      - name: Notifica o Discord
+        if: always() && steps.target.outputs.status != 'resolved'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL nao configurado - pulando notificacao."
+            exit 0
+          fi
+          RESULT="${{ job.status }}"
+          curl -sS -H "Content-Type: application/json" -X POST "$DISCORD_WEBHOOK_URL" -d @- <<EOF
+          {
+            "content": "**Self-Healing executado** (resultado: ${RESULT})\nAlerta: ${{ steps.target.outputs.alert }}\nAcao: kubectl rollout restart deployment/${{ steps.target.outputs.service }} -n ${{ steps.target.outputs.namespace }}\nExecucao: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF

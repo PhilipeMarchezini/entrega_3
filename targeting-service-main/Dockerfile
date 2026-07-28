@@ -11,4 +11,6 @@ COPY . .
 ENV PATH=/home/appuser/.local/bin:$PATH
 USER appuser
 EXPOSE 8003
-CMD ["python", "app.py"]
+# opentelemetry-instrument injeta a instrumentacao de Flask, requests e psycopg2
+# em tempo de execucao - por isso o app.py nao precisou ser alterado.
+CMD ["opentelemetry-instrument", "python", "app.py"]

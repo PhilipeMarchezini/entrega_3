@@ -10,7 +10,7 @@ terraform {
   required_version = ">= 1.6.0"
 
   backend "s3" {
-    bucket       = "togglemaster2-tfstate-fase3"
+    bucket       = "togglemaster-tfstate-436964578473"
     key          = "togglemaster/fase3/terraform.tfstate"
     region       = "us-east-1"
     encrypt      = true

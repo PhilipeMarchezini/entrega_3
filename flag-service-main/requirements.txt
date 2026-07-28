@@ -3,3 +3,10 @@ psycopg2-binary>=2.9.9
 gunicorn>=21.2.0
 python-dotenv>=1.0.0
 requests>=2.32.0
+
+# --- OpenTelemetry (instrumentacao automatica, sem alterar app.py) ---
+opentelemetry-distro>=0.50b0
+opentelemetry-exporter-otlp>=1.29.0
+opentelemetry-instrumentation-flask>=0.50b0
+opentelemetry-instrumentation-requests>=0.50b0
+opentelemetry-instrumentation-psycopg2>=0.50b0

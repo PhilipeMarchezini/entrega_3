@@ -29,7 +29,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-      - run: go mod download
+      # tidy (e nao download) porque as dependencias do OpenTelemetry foram
+      # adicionadas ao go.mod e o go.sum precisa ser regenerado.
+      - run: go mod tidy
       - run: go build -v ./...
       - run: go test -v ./... || true   # tolera ausência de testes nesta entrega
 

@@ -70,6 +70,12 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: togglemaster
+  # O HPA altera spec.replicas do Deployment. Sem isso, o selfHeal
+  # reverteria a escala para o valor fixo do Git.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: ["/spec/replicas"]
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=true]
@@ -85,6 +91,72 @@ spec:
     repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
     targetRevision: main
     path: gitops/apps/analytics-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: togglemaster
+  # Mesmo motivo do evaluation-service: o HPA controla spec.replicas.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: ["/spec/replicas"]
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
+---
+################################################################
+# Fase 4 - Stack de observabilidade.
+#
+# "monitoring-stack" e' um app-of-apps: aponta para gitops/monitoring,
+# onde cada arquivo e' um Application que instala um Helm chart
+# (kube-prometheus-stack, Loki e os dois OTel Collectors).
+################################################################
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
+    targetRevision: main
+    path: gitops/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+---
+# Namespace observability + ConfigMap do dashboard customizado.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-manifests
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
+    targetRevision: main
+    path: gitops/monitoring/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PhilipeMarchezini/entrega_3.git
+    targetRevision: main
+    path: gitops/apps/ingress
   destination:
     server: https://kubernetes.default.svc
     namespace: togglemaster
