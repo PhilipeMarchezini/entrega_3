@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
         - name: evaluation-service
-          image: 661099433763.dkr.ecr.us-east-1.amazonaws.com/togglemaster/evaluation-service:v1.0.0-INITIAL
+          image: 436964578473.dkr.ecr.us-east-1.amazonaws.com/togglemaster/evaluation-service:v1.0.0-INITIAL
           ports: [{ containerPort: 8004 }]
           env:
             - name: PORT
