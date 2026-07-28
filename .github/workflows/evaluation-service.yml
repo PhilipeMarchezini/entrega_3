@@ -73,7 +73,8 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     needs: [security]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
     steps:
@@ -106,7 +107,8 @@ jobs:
   update-gitops:
     runs-on: ubuntu-latest
     needs: docker
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - env:
