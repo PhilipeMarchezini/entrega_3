@@ -1,0 +1,54 @@
+################################################################
+# Injecao e reversao da falha do Bloco 5 do video.
+#
+# POR QUE NAO PELO SECURITY GROUP:
+# remover a regra 5432 do SG nao produz 503. Testado:
+#   - SG e' stateful: as conexoes TCP ja' estabelecidas no pool do
+#     database/sql continuam funcionando, entao os pods VIVOS seguem
+#     respondendo 401 normalmente
+#   - reciclar os pods nao resolve: o auth-service faz log.Fatalf se
+#     nao conectar no boot, entao o pod novo MORRE em vez de responder
+#     503 -- e sem pod vivo nao ha' metrica de 5xx, e o alerta nao dispara
+#   - carga concorrente tambem nao forcou conexao nova
+#
+# O QUE FUNCIONA:
+# o handler de validacao separa sql.ErrNoRows (-> 401) de qualquer
+# outro erro de query (-> 503). Renomear a tabela api_keys faz a query
+# falhar com "relation does not exist", que NAO e' ErrNoRows. O pod
+# continua vivo, servindo, e passa a emitir 503 -- que e' exatamente o
+# que a metrica precisa para o alerta subir.
+#
+# Isso atende o enunciado, que pede "cause um problema proposital
+# (ex: pare o banco de dados ou injete erro no codigo)".
+#
+#   QUEBRAR:   kubectl apply -f gitops/incidente-job.yaml
+#   RESTAURAR: kubectl apply -f gitops/incidente-job.yaml   (o de baixo)
+#
+# Os dois Jobs sao independentes; rode um de cada vez e apague antes
+# de repetir:  kubectl delete job quebrar-auth restaurar-auth -n togglemaster
+################################################################
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: restaurar-auth
+  namespace: togglemaster
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          env:
+            - name: AUTH_URL
+              valueFrom:
+                secretKeyRef: { name: auth-secrets, key: database_url }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              psql "$AUTH_URL" -v ON_ERROR_STOP=1 -c \
+                "ALTER TABLE api_keys_indisponivel RENAME TO api_keys;"
+              psql "$AUTH_URL" -tAc "SELECT 'chaves ativas: ' || count(*) FROM api_keys WHERE is_active;"
+              echo "RESTAURADO."
