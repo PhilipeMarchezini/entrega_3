@@ -15,6 +15,12 @@ metadata:
   namespace: observability
   labels:
     grafana_dashboard: "1"
+  annotations:
+    # Sem isso o dashboard cai na pasta raiz ("Geral"), misturado com os
+    # ~20 dashboards que o kube-prometheus-stack traz. A pasta ToggleMaster
+    # ja' existe -- e' onde o provisionamento poe a regra de alerta --,
+    # entao os dois ficam juntos e o dashboard fica facil de achar.
+    grafana_folder: "ToggleMaster"
 data:
   togglemaster-overview.json: |
     {
