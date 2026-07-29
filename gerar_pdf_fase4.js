@@ -26,7 +26,7 @@ pdfmake.addFonts({
 // ----------------------------------------------------------------
 // Preencher antes de gerar
 // ----------------------------------------------------------------
-const LINK_VIDEO = "(link será inserido)";
+const LINK_VIDEO = "https://youtu.be/q2fNeq_NN-I";
 
 const EVIDENCIAS = [
   {
