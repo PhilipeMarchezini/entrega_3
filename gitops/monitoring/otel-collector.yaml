@@ -118,7 +118,7 @@ spec:
                 enabled: true
 
             debug:
-              verbosity: basic
+              verbosity: detailed
 
           service:
             telemetry:
@@ -128,7 +128,7 @@ spec:
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, resource, batch]
-                exporters: [datadog]
+                exporters: [datadog, debug]
               metrics:
                 receivers: [otlp]
                 processors: [memory_limiter, resource, transform/help_uniforme, batch]
