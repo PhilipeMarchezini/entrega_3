@@ -96,3 +96,7 @@ tmp/
 .env
 .env.local
 .env.*.local
+
+# Screenshots de trabalho fora de evidencias/
+/image*.png
+/*.jpg
