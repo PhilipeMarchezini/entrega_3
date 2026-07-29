@@ -196,9 +196,9 @@ spec:
                             range: true
                             expr: |
                               100 * (
-                                sum(rate(http_server_request_duration_seconds_count{service_name="auth-service", http_response_status_code=~"5.."}[5m]))
+                                sum(rate(http_server_duration_milliseconds_count{service_name="auth-service", http_status_code=~"5.."}[5m]))
                                 /
-                                clamp_min(sum(rate(http_server_request_duration_seconds_count{service_name="auth-service"}[5m])), 0.001)
+                                clamp_min(sum(rate(http_server_duration_milliseconds_count{service_name="auth-service"}[5m])), 0.001)
                               )
                         # B) reduz a serie para um unico valor
                         - refId: B
